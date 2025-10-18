@@ -2,6 +2,13 @@ import React, { useState } from 'react';
 import { Upload, RefreshCw, Send, FileText, Loader2, CheckCircle, XCircle } from 'lucide-react';
 import * as mammoth from 'mammoth';
 
+// Declare pdfjsLib for TypeScript
+declare global {
+  interface Window {
+    pdfjsLib: any;
+  }
+}
+
 interface QuizQuestion {
   question: string;
   options: string[];
@@ -22,8 +29,8 @@ type Step = 'setup' | 'upload' | 'quiz' | 'results';
 
 export default function DOCXQuizApp() {
   const [apiKey, setApiKey] = useState<string>('');
-  const [docxFile, setDocxFile] = useState<File | null>(null);
-  const [docxText, setDocxText] = useState<string>('');
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
+  const [extractedText, setExtractedText] = useState<string>('');
   const [quiz, setQuiz] = useState<QuizData | null>(null);
   const [answers, setAnswers] = useState<Record<number, number>>({});
   const [results, setResults] = useState<QuizResult[] | null>(null);
@@ -31,6 +38,49 @@ export default function DOCXQuizApp() {
   const [step, setStep] = useState<Step>('setup');
 
   const extractTextFromDOCX = async (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = async (e: ProgressEvent<FileReader>) => {
+        try {
+          const arrayBuffer = e.target?.result as ArrayBuffer;
+          const result = await mammoth.extractRawText({ arrayBuffer });
+          resolve(result.value);
+        } catch (error) {
+          reject(error);
+        }
+      };
+      reader.onerror = reject;
+      reader.readAsArrayBuffer(file);
+    });
+  };
+
+  const extractTextFromPDF = async (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = async (e: ProgressEvent<FileReader>) => {
+        try {
+          const typedArray = new Uint8Array(e.target?.result as ArrayBuffer);
+          const pdf = await window.pdfjsLib.getDocument(typedArray).promise;
+          let fullText = '';
+          
+          for (let i = 1; i <= pdf.numPages; i++) {
+            const page = await pdf.getPage(i);
+            const textContent = await page.getTextContent();
+            const pageText = textContent.items.map((item: any) => item.str).join(' ');
+            fullText += pageText + '\n';
+          }
+          
+          resolve(fullText);
+        } catch (error) {
+          reject(error);
+        }
+      };
+      reader.onerror = reject;
+      reader.readAsArrayBuffer(file);
+    });
+  };
+
+  const extractTextFromDOC = async (file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = async (e: ProgressEvent<FileReader>) => {
@@ -160,19 +210,35 @@ ${text.substring(0, 10000)}`
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>): Promise<void> => {
     const file = e.target.files?.[0];
-    if (file && (file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || file.name.endsWith('.docx'))) {
-      setDocxFile(file);
-      setLoading(true);
-      try {
-        const text = await extractTextFromDOCX(file);
-        setDocxText(text);
-        await generateQuiz(text);
-      } catch (error) {
-        alert('Hiba a DOCX feldolgozása során: ' + (error as Error).message);
-        setLoading(false);
+    if (!file) return;
+
+    const fileExtension = file.name.split('.').pop()?.toLowerCase();
+    const validTypes = ['pdf', 'doc', 'docx'];
+    
+    if (!fileExtension || !validTypes.includes(fileExtension)) {
+      alert('Kérlek, válassz egy PDF, DOC vagy DOCX fájlt!');
+      return;
+    }
+
+    setUploadedFile(file);
+    setLoading(true);
+    
+    try {
+      let text = '';
+      
+      if (fileExtension === 'pdf') {
+        text = await extractTextFromPDF(file);
+      } else if (fileExtension === 'docx') {
+        text = await extractTextFromDOCX(file);
+      } else if (fileExtension === 'doc') {
+        text = await extractTextFromDOC(file);
       }
-    } else {
-      alert('Kérlek, válassz egy DOCX fájlt!');
+      
+      setExtractedText(text);
+      await generateQuiz(text);
+    } catch (error) {
+      alert('Hiba a fájl feldolgozása során: ' + (error as Error).message);
+      setLoading(false);
     }
   };
 
@@ -196,7 +262,7 @@ ${text.substring(0, 10000)}`
   };
 
   const resetQuiz = async (): Promise<void> => {
-    if (!docxText) return;
+    if (!extractedText) return;
     
     setAnswers({});
     setResults(null);
@@ -204,7 +270,7 @@ ${text.substring(0, 10000)}`
     setLoading(true);
     
     try {
-      await generateQuiz(docxText);
+      await generateQuiz(extractedText);
     } catch (error) {
       alert('Hiba az újra generálás során: ' + (error as Error).message);
       setLoading(false);
@@ -213,8 +279,8 @@ ${text.substring(0, 10000)}`
 
   const startOver = (): void => {
     setApiKey('');
-    setDocxFile(null);
-    setDocxText('');
+    setUploadedFile(null);
+    setExtractedText('');
     setQuiz(null);
     setAnswers({});
     setResults(null);
@@ -227,7 +293,7 @@ ${text.substring(0, 10000)}`
         <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full">
           <div className="text-center mb-8">
             <FileText className="w-16 h-16 text-indigo-600 mx-auto mb-4" />
-            <h1 className="text-3xl font-bold text-gray-800 mb-2">DOCX Kvíz Generátor</h1>
+            <h1 className="text-3xl font-bold text-gray-800 mb-2">Dokumentum Kvíz Generátor</h1>
             <p className="text-gray-600">Groq AI-val működik</p>
           </div>
           
@@ -267,8 +333,8 @@ ${text.substring(0, 10000)}`
         <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full">
           <div className="text-center mb-8">
             <Upload className="w-16 h-16 text-indigo-600 mx-auto mb-4" />
-            <h2 className="text-2xl font-bold text-gray-800 mb-2">DOCX Feltöltés</h2>
-            <p className="text-gray-600">Tölts fel egy 3-4 oldalas Word dokumentumot</p>
+            <h2 className="text-2xl font-bold text-gray-800 mb-2">Dokumentum Feltöltés</h2>
+            <p className="text-gray-600">Tölts fel egy 3-4 oldalas dokumentumot</p>
           </div>
 
           {loading ? (
@@ -281,12 +347,12 @@ ${text.substring(0, 10000)}`
               <label className="flex flex-col items-center justify-center w-full h-48 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-indigo-500 hover:bg-indigo-50 transition">
                 <div className="flex flex-col items-center justify-center pt-5 pb-6">
                   <Upload className="w-12 h-12 text-gray-400 mb-3" />
-                  <p className="text-sm text-gray-600 font-medium">Kattints a DOCX feltöltéséhez</p>
-                  <p className="text-xs text-gray-500 mt-1">Word dokumentum (.docx), max 4 oldal</p>
+                  <p className="text-sm text-gray-600 font-medium">Kattints a fájl feltöltéséhez</p>
+                  <p className="text-xs text-gray-500 mt-1">PDF, DOC vagy DOCX, max 4 oldal</p>
                 </div>
                 <input
                   type="file"
-                  accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                  accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                   onChange={handleFileUpload}
                   className="hidden"
                 />
@@ -458,7 +524,7 @@ ${text.substring(0, 10000)}`
                 onClick={startOver}
                 className="bg-gray-200 text-gray-700 px-6 py-4 rounded-lg font-semibold hover:bg-gray-300 transition"
               >
-                Új DOCX
+                Új dokumentum
               </button>
             </div>
           </div>
