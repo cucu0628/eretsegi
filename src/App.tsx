@@ -1,24 +1,41 @@
-// @ts-nocheck
 import React, { useState } from 'react';
 import { Upload, RefreshCw, Send, FileText, Loader2, CheckCircle, XCircle } from 'lucide-react';
 import * as mammoth from 'mammoth';
 
-export default function DOCXQuizApp() {
-  const [apiKey, setApiKey] = useState('');
-  const [docxFile, setDocxFile] = useState(null);
-  const [docxText, setDocxText] = useState('');
-  const [quiz, setQuiz] = useState(null);
-  const [answers, setAnswers] = useState({});
-  const [results, setResults] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [step, setStep] = useState('setup'); // setup, upload, quiz, results
+interface QuizQuestion {
+  question: string;
+  options: string[];
+  correct: number;
+}
 
-  const extractTextFromDOCX = async (file) => {
+interface QuizData {
+  questions: QuizQuestion[];
+}
+
+interface QuizResult {
+  correct: boolean;
+  userAnswer: number | undefined;
+  correctAnswer: number;
+}
+
+type Step = 'setup' | 'upload' | 'quiz' | 'results';
+
+export default function DOCXQuizApp() {
+  const [apiKey, setApiKey] = useState<string>('');
+  const [docxFile, setDocxFile] = useState<File | null>(null);
+  const [docxText, setDocxText] = useState<string>('');
+  const [quiz, setQuiz] = useState<QuizData | null>(null);
+  const [answers, setAnswers] = useState<Record<number, number>>({});
+  const [results, setResults] = useState<QuizResult[] | null>(null);
+  const [loading, setLoading] = useState<boolean>(false);
+  const [step, setStep] = useState<Step>('setup');
+
+  const extractTextFromDOCX = async (file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
-      reader.onload = async (e) => {
+      reader.onload = async (e: ProgressEvent<FileReader>) => {
         try {
-          const arrayBuffer = e.target.result;
+          const arrayBuffer = e.target?.result as ArrayBuffer;
           const result = await mammoth.extractRawText({ arrayBuffer });
           resolve(result.value);
         } catch (error) {
@@ -30,7 +47,7 @@ export default function DOCXQuizApp() {
     });
   };
 
-  const generateQuiz = async (text) => {
+  const generateQuiz = async (text: string): Promise<void> => {
     setLoading(true);
     try {
       const wordCount = text.split(/\s+/).length;
@@ -100,7 +117,7 @@ ${text.substring(0, 10000)}`
       
       const jsonMatch = cleanedContent.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
-        const quizData = JSON.parse(jsonMatch[0]);
+        const quizData: QuizData = JSON.parse(jsonMatch[0]);
         
         // Validáljuk a kvíz adatokat
         if (!quizData.questions || !Array.isArray(quizData.questions)) {
@@ -121,7 +138,7 @@ ${text.substring(0, 10000)}`
           }
           
           return q;
-        }).filter(q => q !== null);
+        }).filter((q): q is QuizQuestion => q !== null);
         
         if (quizData.questions.length === 0) {
           throw new Error('Nem sikerült érvényes kérdéseket generálni');
@@ -135,14 +152,14 @@ ${text.substring(0, 10000)}`
         throw new Error('Nem sikerült értelmezni a választ');
       }
     } catch (error) {
-      alert('Hiba történt: ' + error.message);
+      alert('Hiba történt: ' + (error as Error).message);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleFileUpload = async (e) => {
-    const file = e.target.files[0];
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>): Promise<void> => {
+    const file = e.target.files?.[0];
     if (file && (file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || file.name.endsWith('.docx'))) {
       setDocxFile(file);
       setLoading(true);
@@ -151,7 +168,7 @@ ${text.substring(0, 10000)}`
         setDocxText(text);
         await generateQuiz(text);
       } catch (error) {
-        alert('Hiba a DOCX feldolgozása során: ' + error.message);
+        alert('Hiba a DOCX feldolgozása során: ' + (error as Error).message);
         setLoading(false);
       }
     } else {
@@ -159,15 +176,17 @@ ${text.substring(0, 10000)}`
     }
   };
 
-  const handleAnswerChange = (questionIndex, optionIndex) => {
+  const handleAnswerChange = (questionIndex: number, optionIndex: number): void => {
     setAnswers({
       ...answers,
       [questionIndex]: optionIndex
     });
   };
 
-  const checkAnswers = () => {
-    const newResults = quiz.questions.map((q, idx) => ({
+  const checkAnswers = (): void => {
+    if (!quiz) return;
+    
+    const newResults: QuizResult[] = quiz.questions.map((q, idx) => ({
       correct: answers[idx] === q.correct,
       userAnswer: answers[idx],
       correctAnswer: q.correct
@@ -176,14 +195,23 @@ ${text.substring(0, 10000)}`
     setStep('results');
   };
 
-  const resetQuiz = async () => {
+  const resetQuiz = async (): Promise<void> => {
+    if (!docxText) return;
+    
     setAnswers({});
     setResults(null);
-    setStep('quiz');
-    await generateQuiz(docxText);
+    setQuiz(null);
+    setLoading(true);
+    
+    try {
+      await generateQuiz(docxText);
+    } catch (error) {
+      alert('Hiba az újra generálás során: ' + (error as Error).message);
+      setLoading(false);
+    }
   };
 
-  const startOver = () => {
+  const startOver = (): void => {
     setApiKey('');
     setDocxFile(null);
     setDocxText('');
@@ -277,8 +305,8 @@ ${text.substring(0, 10000)}`
     );
   }
 
-  if (step === 'quiz') {
-    const allAnswered = quiz && Object.keys(answers).length === quiz.questions.length;
+  if (step === 'quiz' && quiz) {
+    const allAnswered = Object.keys(answers).length === quiz.questions.length;
     
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4 py-8">
@@ -337,7 +365,7 @@ ${text.substring(0, 10000)}`
               <button
                 onClick={resetQuiz}
                 disabled={loading}
-                className="bg-gray-200 text-gray-700 px-6 py-4 rounded-lg font-semibold hover:bg-gray-300 transition flex items-center justify-center gap-2"
+                className="bg-gray-200 text-gray-700 px-6 py-4 rounded-lg font-semibold hover:bg-gray-300 disabled:bg-gray-400 disabled:cursor-not-allowed transition flex items-center justify-center gap-2"
               >
                 <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
                 Új kvíz
@@ -349,10 +377,10 @@ ${text.substring(0, 10000)}`
     );
   }
 
-  if (step === 'results') {
-    const score = results ? results.filter(r => r.correct).length : 0;
-    const totalQuestions = results ? results.length : 0;
-    const percentage = totalQuestions > 0 ? Math.round((score / totalQuestions) * 100) : 0;
+  if (step === 'results' && quiz && results) {
+    const score = results.filter(r => r.correct).length;
+    const totalQuestions = results.length;
+    const percentage = Math.round((score / totalQuestions) * 100);
 
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4 py-8">
@@ -421,7 +449,7 @@ ${text.substring(0, 10000)}`
               <button
                 onClick={resetQuiz}
                 disabled={loading}
-                className="flex-1 bg-indigo-600 text-white py-4 rounded-lg font-semibold hover:bg-indigo-700 transition flex items-center justify-center gap-2"
+                className="flex-1 bg-indigo-600 text-white py-4 rounded-lg font-semibold hover:bg-indigo-700 disabled:bg-indigo-400 disabled:cursor-not-allowed transition flex items-center justify-center gap-2"
               >
                 <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
                 Új kvíz generálása
