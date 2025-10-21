@@ -2,13 +2,6 @@ import React, { useState } from 'react';
 import { Upload, RefreshCw, Send, FileText, Loader2, CheckCircle, XCircle } from 'lucide-react';
 import * as mammoth from 'mammoth';
 
-// Declare pdfjsLib for TypeScript
-declare global {
-  interface Window {
-    pdfjsLib: any;
-  }
-}
-
 interface QuizQuestion {
   question: string;
   options: string[];
@@ -45,32 +38,6 @@ export default function DOCXQuizApp() {
           const arrayBuffer = e.target?.result as ArrayBuffer;
           const result = await mammoth.extractRawText({ arrayBuffer });
           resolve(result.value);
-        } catch (error) {
-          reject(error);
-        }
-      };
-      reader.onerror = reject;
-      reader.readAsArrayBuffer(file);
-    });
-  };
-
-  const extractTextFromPDF = async (file: File): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = async (e: ProgressEvent<FileReader>) => {
-        try {
-          const typedArray = new Uint8Array(e.target?.result as ArrayBuffer);
-          const pdf = await window.pdfjsLib.getDocument(typedArray).promise;
-          let fullText = '';
-          
-          for (let i = 1; i <= pdf.numPages; i++) {
-            const page = await pdf.getPage(i);
-            const textContent = await page.getTextContent();
-            const pageText = textContent.items.map((item: any) => item.str).join(' ');
-            fullText += pageText + '\n';
-          }
-          
-          resolve(fullText);
         } catch (error) {
           reject(error);
         }
@@ -159,7 +126,6 @@ ${text.substring(0, 10000)}`
       const data = await response.json();
       const content = data.choices[0].message.content;
       
-      // Tisztítsuk meg a választ, távolítsuk el a markdown kód blokkokat
       let cleanedContent = content.trim();
       cleanedContent = cleanedContent.replace(/```json\s*/g, '');
       cleanedContent = cleanedContent.replace(/```\s*/g, '');
@@ -169,22 +135,19 @@ ${text.substring(0, 10000)}`
       if (jsonMatch) {
         const quizData: QuizData = JSON.parse(jsonMatch[0]);
         
-        // Validáljuk a kvíz adatokat
         if (!quizData.questions || !Array.isArray(quizData.questions)) {
           throw new Error('Érvénytelen kvíz formátum');
         }
         
-        // Ellenőrizzük és javítsuk ki az egyes kérdéseket
         quizData.questions = quizData.questions.map((q, idx) => {
           if (!q.question || !q.options || !Array.isArray(q.options) || q.options.length !== 4) {
             console.error(`Érvénytelen kérdés ${idx}:`, q);
             return null;
           }
           
-          // Ellenőrizzük hogy a correct index érvényes-e
           if (typeof q.correct !== 'number' || q.correct < 0 || q.correct > 3) {
             console.error(`Érvénytelen correct index a ${idx}. kérdésnél:`, q.correct);
-            q.correct = 0; // Alapértelmezett első válasz
+            q.correct = 0;
           }
           
           return q;
@@ -213,10 +176,10 @@ ${text.substring(0, 10000)}`
     if (!file) return;
 
     const fileExtension = file.name.split('.').pop()?.toLowerCase();
-    const validTypes = ['pdf', 'doc', 'docx'];
+    const validTypes = ['doc', 'docx'];
     
     if (!fileExtension || !validTypes.includes(fileExtension)) {
-      alert('Kérlek, válassz egy PDF, DOC vagy DOCX fájlt!');
+      alert('Kérlek, válassz egy DOC vagy DOCX fájlt!');
       return;
     }
 
@@ -226,9 +189,7 @@ ${text.substring(0, 10000)}`
     try {
       let text = '';
       
-      if (fileExtension === 'pdf') {
-        text = await extractTextFromPDF(file);
-      } else if (fileExtension === 'docx') {
+      if (fileExtension === 'docx') {
         text = await extractTextFromDOCX(file);
       } else if (fileExtension === 'doc') {
         text = await extractTextFromDOC(file);
@@ -289,17 +250,21 @@ ${text.substring(0, 10000)}`
 
   if (step === 'setup') {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
-        <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full">
+      <div className="min-h-screen bg-gradient-to-br from-purple-900 via-slate-900 to-black flex items-center justify-center p-4">
+        <div className="bg-slate-800/90 backdrop-blur-sm rounded-2xl shadow-2xl p-8 max-w-md w-full border border-purple-500/30">
           <div className="text-center mb-8">
-            <FileText className="w-16 h-16 text-indigo-600 mx-auto mb-4" />
-            <h1 className="text-3xl font-bold text-gray-800 mb-2">Dokumentum Kvíz Generátor</h1>
-            <p className="text-gray-600">Groq AI-val működik</p>
+            <div className="inline-block p-4 bg-purple-500/20 rounded-full mb-4">
+              <FileText className="w-16 h-16 text-purple-400" />
+            </div>
+            <h1 className="text-4xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent mb-2">
+              Quiz Generátor
+            </h1>
+            <p className="text-gray-400">Groq AI-val működik</p>
           </div>
           
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-gray-300 mb-2">
                 Groq API Kulcs
               </label>
               <input
@@ -307,17 +272,17 @@ ${text.substring(0, 10000)}`
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
                 placeholder="gsk_..."
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition"
+                className="w-full px-4 py-3 bg-slate-700/50 border border-purple-500/30 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none transition text-white placeholder-gray-500"
               />
               <p className="mt-2 text-xs text-gray-500">
-                Szerezz API kulcsot: <a href="https://console.groq.com" target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline">console.groq.com</a>
+                Szerezz API kulcsot: <a href="https://console.groq.com" target="_blank" rel="noopener noreferrer" className="text-purple-400 hover:text-purple-300 hover:underline transition">console.groq.com</a>
               </p>
             </div>
             
             <button
               onClick={() => setStep('upload')}
               disabled={!apiKey}
-              className="w-full bg-indigo-600 text-white py-3 rounded-lg font-semibold hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition"
+              className="w-full bg-gradient-to-r from-purple-600 to-pink-600 text-white py-3 rounded-lg font-semibold hover:from-purple-700 hover:to-pink-700 disabled:from-gray-700 disabled:to-gray-700 disabled:cursor-not-allowed transition shadow-lg shadow-purple-500/20"
             >
               Tovább
             </button>
@@ -329,30 +294,32 @@ ${text.substring(0, 10000)}`
 
   if (step === 'upload' && !quiz) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
-        <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full">
+      <div className="min-h-screen bg-gradient-to-br from-purple-900 via-slate-900 to-black flex items-center justify-center p-4">
+        <div className="bg-slate-800/90 backdrop-blur-sm rounded-2xl shadow-2xl p-8 max-w-md w-full border border-purple-500/30">
           <div className="text-center mb-8">
-            <Upload className="w-16 h-16 text-indigo-600 mx-auto mb-4" />
-            <h2 className="text-2xl font-bold text-gray-800 mb-2">Dokumentum Feltöltés</h2>
-            <p className="text-gray-600">Tölts fel egy 3-4 oldalas dokumentumot</p>
+            <div className="inline-block p-4 bg-purple-500/20 rounded-full mb-4">
+              <Upload className="w-16 h-16 text-purple-400" />
+            </div>
+            <h2 className="text-3xl font-bold text-white mb-2">Dokumentum Feltöltés</h2>
+            <p className="text-gray-400">Tölts fel egy 3-4 oldalas dokumentumot</p>
           </div>
 
           {loading ? (
             <div className="text-center py-12">
-              <Loader2 className="w-12 h-12 text-indigo-600 animate-spin mx-auto mb-4" />
-              <p className="text-gray-600">Kvíz generálása...</p>
+              <Loader2 className="w-12 h-12 text-purple-400 animate-spin mx-auto mb-4" />
+              <p className="text-gray-400">Kvíz generálása...</p>
             </div>
           ) : (
             <div>
-              <label className="flex flex-col items-center justify-center w-full h-48 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-indigo-500 hover:bg-indigo-50 transition">
+              <label className="flex flex-col items-center justify-center w-full h-48 border-2 border-dashed border-purple-500/30 rounded-lg cursor-pointer hover:border-purple-500 hover:bg-slate-700/30 transition group">
                 <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                  <Upload className="w-12 h-12 text-gray-400 mb-3" />
-                  <p className="text-sm text-gray-600 font-medium">Kattints a fájl feltöltéséhez</p>
-                  <p className="text-xs text-gray-500 mt-1">PDF, DOC vagy DOCX, max 4 oldal</p>
+                  <Upload className="w-12 h-12 text-gray-500 group-hover:text-purple-400 mb-3 transition" />
+                  <p className="text-sm text-gray-300 font-medium">Kattints a fájl feltöltéséhez</p>
+                  <p className="text-xs text-gray-500 mt-1">DOC vagy DOCX, max 4 oldal</p>
                 </div>
                 <input
                   type="file"
-                  accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                  accept=".doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                   onChange={handleFileUpload}
                   className="hidden"
                 />
@@ -360,7 +327,7 @@ ${text.substring(0, 10000)}`
               
               <button
                 onClick={startOver}
-                className="w-full mt-4 text-gray-600 py-2 hover:text-indigo-600 transition"
+                className="w-full mt-4 text-gray-400 py-2 hover:text-purple-400 transition"
               >
                 Vissza
               </button>
@@ -375,14 +342,14 @@ ${text.substring(0, 10000)}`
     const allAnswered = Object.keys(answers).length === quiz.questions.length;
     
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4 py-8">
+      <div className="min-h-screen bg-gradient-to-br from-purple-900 via-slate-900 to-black p-4 py-8">
         <div className="max-w-3xl mx-auto">
-          <div className="bg-white rounded-2xl shadow-xl p-8">
+          <div className="bg-slate-800/90 backdrop-blur-sm rounded-2xl shadow-2xl p-8 border border-purple-500/30">
             <div className="mb-8">
-              <h2 className="text-3xl font-bold text-gray-800 mb-2">Kvíz</h2>
-              <p className="text-gray-600">Válaszolj az alábbi kérdésekre</p>
-              <div className="mt-4 bg-indigo-50 rounded-lg p-3">
-                <p className="text-sm text-indigo-800">
+              <h2 className="text-4xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent mb-2">Kvíz</h2>
+              <p className="text-gray-400">Válaszolj az alábbi kérdésekre</p>
+              <div className="mt-4 bg-purple-900/30 rounded-lg p-3 border border-purple-500/30">
+                <p className="text-sm text-purple-300">
                   Megválaszolt: {Object.keys(answers).length} / {quiz.questions.length}
                 </p>
               </div>
@@ -390,8 +357,8 @@ ${text.substring(0, 10000)}`
 
             <div className="space-y-6">
               {quiz.questions.map((q, qIdx) => (
-                <div key={qIdx} className="bg-gray-50 rounded-xl p-6">
-                  <h3 className="text-lg font-semibold text-gray-800 mb-4">
+                <div key={qIdx} className="bg-slate-700/30 backdrop-blur-sm rounded-xl p-6 border border-purple-500/20">
+                  <h3 className="text-lg font-semibold text-white mb-4">
                     {qIdx + 1}. {q.question}
                   </h3>
                   <div className="space-y-3">
@@ -400,8 +367,8 @@ ${text.substring(0, 10000)}`
                         key={oIdx}
                         className={`flex items-center p-4 rounded-lg cursor-pointer transition ${
                           answers[qIdx] === oIdx
-                            ? 'bg-indigo-100 border-2 border-indigo-500'
-                            : 'bg-white border-2 border-gray-200 hover:border-indigo-300'
+                            ? 'bg-purple-600/30 border-2 border-purple-500 shadow-lg shadow-purple-500/20'
+                            : 'bg-slate-800/50 border-2 border-slate-600/50 hover:border-purple-500/50 hover:bg-slate-700/50'
                         }`}
                       >
                         <input
@@ -409,9 +376,9 @@ ${text.substring(0, 10000)}`
                           name={`question-${qIdx}`}
                           checked={answers[qIdx] === oIdx}
                           onChange={() => handleAnswerChange(qIdx, oIdx)}
-                          className="mr-3 w-5 h-5 text-indigo-600"
+                          className="mr-3 w-5 h-5 text-purple-600"
                         />
-                        <span className="text-gray-700">{option}</span>
+                        <span className="text-gray-200">{option}</span>
                       </label>
                     ))}
                   </div>
@@ -423,7 +390,7 @@ ${text.substring(0, 10000)}`
               <button
                 onClick={checkAnswers}
                 disabled={!allAnswered}
-                className="flex-1 bg-indigo-600 text-white py-4 rounded-lg font-semibold hover:bg-indigo-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition flex items-center justify-center gap-2"
+                className="flex-1 bg-gradient-to-r from-purple-600 to-pink-600 text-white py-4 rounded-lg font-semibold hover:from-purple-700 hover:to-pink-700 disabled:from-gray-700 disabled:to-gray-700 disabled:cursor-not-allowed transition flex items-center justify-center gap-2 shadow-lg shadow-purple-500/20"
               >
                 <Send className="w-5 h-5" />
                 Küldés
@@ -431,7 +398,7 @@ ${text.substring(0, 10000)}`
               <button
                 onClick={resetQuiz}
                 disabled={loading}
-                className="bg-gray-200 text-gray-700 px-6 py-4 rounded-lg font-semibold hover:bg-gray-300 disabled:bg-gray-400 disabled:cursor-not-allowed transition flex items-center justify-center gap-2"
+                className="bg-slate-700/50 text-gray-300 px-6 py-4 rounded-lg font-semibold hover:bg-slate-600/50 disabled:bg-slate-800/50 disabled:cursor-not-allowed transition flex items-center justify-center gap-2 border border-purple-500/20"
               >
                 <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
                 Új kvíz
@@ -449,38 +416,38 @@ ${text.substring(0, 10000)}`
     const percentage = Math.round((score / totalQuestions) * 100);
 
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4 py-8">
+      <div className="min-h-screen bg-gradient-to-br from-purple-900 via-slate-900 to-black p-4 py-8">
         <div className="max-w-3xl mx-auto">
-          <div className="bg-white rounded-2xl shadow-xl p-8">
+          <div className="bg-slate-800/90 backdrop-blur-sm rounded-2xl shadow-2xl p-8 border border-purple-500/30">
             <div className="text-center mb-8">
-              <div className={`w-24 h-24 mx-auto mb-4 rounded-full flex items-center justify-center ${
-                percentage >= 70 ? 'bg-green-100' : 'bg-red-100'
+              <div className={`w-28 h-28 mx-auto mb-4 rounded-full flex items-center justify-center backdrop-blur-sm ${
+                percentage >= 70 ? 'bg-green-500/20 border-2 border-green-500 shadow-lg shadow-green-500/30' : 'bg-red-500/20 border-2 border-red-500 shadow-lg shadow-red-500/30'
               }`}>
-                <span className={`text-4xl font-bold ${
-                  percentage >= 70 ? 'text-green-600' : 'text-red-600'
+                <span className={`text-5xl font-bold ${
+                  percentage >= 70 ? 'text-green-400' : 'text-red-400'
                 }`}>
                   {percentage}%
                 </span>
               </div>
-              <h2 className="text-3xl font-bold text-gray-800 mb-2">Eredmények</h2>
-              <p className="text-gray-600">
+              <h2 className="text-4xl font-bold bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent mb-2">Eredmények</h2>
+              <p className="text-gray-400 text-lg">
                 {score} helyes válasz {totalQuestions}-ból
               </p>
             </div>
 
             <div className="space-y-6">
               {quiz.questions.map((q, qIdx) => (
-                <div key={qIdx} className={`rounded-xl p-6 ${
-                  results[qIdx].correct ? 'bg-green-50 border-2 border-green-200' : 'bg-red-50 border-2 border-red-200'
+                <div key={qIdx} className={`rounded-xl p-6 border-2 backdrop-blur-sm ${
+                  results[qIdx].correct ? 'bg-green-500/10 border-green-500/50' : 'bg-red-500/10 border-red-500/50'
                 }`}>
                   <div className="flex items-start gap-3 mb-4">
                     {results[qIdx].correct ? (
-                      <CheckCircle className="w-6 h-6 text-green-600 flex-shrink-0 mt-1" />
+                      <CheckCircle className="w-6 h-6 text-green-400 flex-shrink-0 mt-1" />
                     ) : (
-                      <XCircle className="w-6 h-6 text-red-600 flex-shrink-0 mt-1" />
+                      <XCircle className="w-6 h-6 text-red-400 flex-shrink-0 mt-1" />
                     )}
                     <div className="flex-1">
-                      <h3 className="text-lg font-semibold text-gray-800 mb-2">
+                      <h3 className="text-lg font-semibold text-white mb-2">
                         {qIdx + 1}. {q.question}
                       </h3>
                       <div className="space-y-2">
@@ -489,18 +456,18 @@ ${text.substring(0, 10000)}`
                             key={oIdx}
                             className={`p-3 rounded-lg ${
                               oIdx === q.correct
-                                ? 'bg-green-100 border-2 border-green-300'
+                                ? 'bg-green-500/20 border-2 border-green-500/50'
                                 : oIdx === results[qIdx].userAnswer && !results[qIdx].correct
-                                ? 'bg-red-100 border-2 border-red-300'
-                                : 'bg-white border border-gray-200'
+                                ? 'bg-red-500/20 border-2 border-red-500/50'
+                                : 'bg-slate-700/30 border border-slate-600/50'
                             }`}
                           >
-                            <span className="text-gray-700">{option}</span>
+                            <span className="text-gray-200">{option}</span>
                             {oIdx === q.correct && (
-                              <span className="ml-2 text-green-600 font-semibold">✓ Helyes</span>
+                              <span className="ml-2 text-green-400 font-semibold">✓ Helyes</span>
                             )}
                             {oIdx === results[qIdx].userAnswer && !results[qIdx].correct && (
-                              <span className="ml-2 text-red-600 font-semibold">✗ Te ezt választottad</span>
+                              <span className="ml-2 text-red-400 font-semibold">✗ Te ezt választottad</span>
                             )}
                           </div>
                         ))}
@@ -515,14 +482,14 @@ ${text.substring(0, 10000)}`
               <button
                 onClick={resetQuiz}
                 disabled={loading}
-                className="flex-1 bg-indigo-600 text-white py-4 rounded-lg font-semibold hover:bg-indigo-700 disabled:bg-indigo-400 disabled:cursor-not-allowed transition flex items-center justify-center gap-2"
+                className="flex-1 bg-gradient-to-r from-purple-600 to-pink-600 text-white py-4 rounded-lg font-semibold hover:from-purple-700 hover:to-pink-700 disabled:from-gray-700 disabled:to-gray-700 disabled:cursor-not-allowed transition flex items-center justify-center gap-2 shadow-lg shadow-purple-500/20"
               >
                 <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
                 Új kvíz generálása
               </button>
               <button
                 onClick={startOver}
-                className="bg-gray-200 text-gray-700 px-6 py-4 rounded-lg font-semibold hover:bg-gray-300 transition"
+                className="bg-slate-700/50 text-gray-300 px-6 py-4 rounded-lg font-semibold hover:bg-slate-600/50 transition border border-purple-500/20"
               >
                 Új dokumentum
               </button>
